@@ -706,6 +706,14 @@ function currentAccumulationMarket() {
   return getUniverseConfig().scanMarket;
 }
 
+function accumulationProxyErrorMessage(status) {
+  if (status === 404 || status === 405) {
+    return "歷史結構分析 API 不可用，請用 `node server.js` 啟動這個專案，不要使用 Live Server 或其他純靜態伺服器。";
+  }
+
+  return `history ${status}`;
+}
+
 async function scanAccumulationLongMatches(requestId) {
   clearAccumulationMatches();
   const candidates = state.rows.filter((row) => shouldAnalyzeAccumulationHistory(row, state.accumulationRules)).map((row) => row.symbol);
@@ -742,7 +750,7 @@ async function scanAccumulationLongMatches(requestId) {
     });
 
     if (!response.ok) {
-      throw new Error(`history ${response.status}`);
+      throw new Error(accumulationProxyErrorMessage(response.status));
     }
 
     const payload = await response.json();
@@ -803,7 +811,7 @@ async function scanAccumulationLongMatches(requestId) {
     applyFilters();
     setText(
       els.statusText,
-      `快照更新完成，但低檔吸籌長多歷史結構掃描失敗：${error.message}。其他條件仍可正常使用。`,
+      `快照更新完成，但低檔吸籌長多歷史結構掃描失敗：${error.message} 其他條件仍可正常使用。`,
     );
   }
 }

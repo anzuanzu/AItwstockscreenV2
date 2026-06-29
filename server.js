@@ -12,6 +12,7 @@ const HISTORY_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const HISTORY_RANGE = "2y";
 const HISTORY_INTERVAL = "1d";
 const ACCUMULATION_SCAN_CONCURRENCY = 10;
+const YAHOO_HISTORY_HOSTS = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
 const ACCUMULATION_DEFAULT_RULES = {
   rangeLookback: 250,
   spikeLookback: 120,
@@ -179,15 +180,36 @@ function toYahooSymbol(symbol, market) {
     return String(symbol || "");
   }
 
-  if (market === "taiwan" || exchange === "TWSE") {
-    return `${code}.TW`;
-  }
-
   if (exchange === "TPEX") {
     return `${code}.TWO`;
   }
 
+  if (exchange === "TWSE" || market === "taiwan") {
+    return `${code}.TW`;
+  }
+
   return code.replace(/[./]/g, "-");
+}
+
+function buildYahooSymbolCandidates(symbol, market) {
+  const [exchange, code] = String(symbol || "").split(":");
+  if (!code) {
+    return [String(symbol || "")];
+  }
+
+  if (exchange === "TPEX") {
+    return [`${code}.TWO`, `${code}.TW`];
+  }
+
+  if (exchange === "TWSE") {
+    return [`${code}.TW`];
+  }
+
+  if (market === "taiwan") {
+    return [`${code}.TW`, `${code}.TWO`];
+  }
+
+  return [code.replace(/[./]/g, "-")];
 }
 
 async function fetchHistoryBars(symbol, market) {
@@ -198,49 +220,68 @@ async function fetchHistoryBars(symbol, market) {
     return cached.bars;
   }
 
-  const yahooSymbol = toYahooSymbol(symbol, market);
-  const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`);
-  url.searchParams.set("range", HISTORY_RANGE);
-  url.searchParams.set("interval", HISTORY_INTERVAL);
-  url.searchParams.set("includePrePost", "false");
-  url.searchParams.set("events", "div,splits");
+  const yahooSymbols = buildYahooSymbolCandidates(symbol, market);
+  let lastError = new Error("history unavailable");
 
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      Accept: "application/json",
-    },
-  });
+  for (const yahooSymbol of yahooSymbols) {
+    for (const host of YAHOO_HISTORY_HOSTS) {
+      const url = new URL(`https://${host}/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`);
+      url.searchParams.set("range", HISTORY_RANGE);
+      url.searchParams.set("interval", HISTORY_INTERVAL);
+      url.searchParams.set("includePrePost", "false");
+      url.searchParams.set("events", "div,splits");
 
-  if (!response.ok) {
-    throw new Error(`history ${response.status}`);
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        lastError = new Error(`history ${response.status}`);
+        if ([404, 405].includes(response.status)) {
+          continue;
+        }
+
+        throw lastError;
+      }
+
+      const json = await response.json();
+      const result = json?.chart?.result?.[0];
+      const quote = result?.indicators?.quote?.[0];
+      const timestamps = result?.timestamp;
+      if (!result || !quote || !Array.isArray(timestamps)) {
+        lastError = new Error("history payload invalid");
+        continue;
+      }
+
+      const bars = timestamps
+        .map((timestamp, index) => ({
+          timestamp,
+          open: quote.open?.[index],
+          high: quote.high?.[index],
+          low: quote.low?.[index],
+          close: quote.close?.[index],
+          volume: quote.volume?.[index],
+        }))
+        .filter(
+          (bar) =>
+            [bar.open, bar.high, bar.low, bar.close, bar.volume].every((value) => Number.isFinite(value)) &&
+            bar.volume >= 0,
+        );
+
+      if (!bars.length) {
+        lastError = new Error("history empty");
+        continue;
+      }
+
+      historyCache.set(cacheKey, { fetchedAt: now, bars });
+      return bars;
+    }
   }
 
-  const json = await response.json();
-  const result = json?.chart?.result?.[0];
-  const quote = result?.indicators?.quote?.[0];
-  const timestamps = result?.timestamp;
-  if (!result || !quote || !Array.isArray(timestamps)) {
-    throw new Error("history payload invalid");
-  }
-
-  const bars = timestamps
-    .map((timestamp, index) => ({
-      timestamp,
-      open: quote.open?.[index],
-      high: quote.high?.[index],
-      low: quote.low?.[index],
-      close: quote.close?.[index],
-      volume: quote.volume?.[index],
-    }))
-    .filter(
-      (bar) =>
-        [bar.open, bar.high, bar.low, bar.close, bar.volume].every((value) => Number.isFinite(value)) &&
-        bar.volume >= 0,
-    );
-
-  historyCache.set(cacheKey, { fetchedAt: now, bars });
-  return bars;
+  throw lastError;
 }
 
 function analyseAccumulationLong(bars, rules) {
