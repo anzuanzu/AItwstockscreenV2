@@ -31,6 +31,7 @@ const ACCUMULATION_RULE_FIELD_DEFINITIONS = [
   { key: "maxConsolidationVolumeRatio", type: "percentRatio" },
   { key: "maxDistanceToHighPct", type: "float" },
 ];
+const STATIC_ACCUMULATION_DATA_PREFIX = "./data/accumulation-";
 const UNIVERSE_CONFIG = {
   TAIWAN: {
     key: "TAIWAN",
@@ -421,6 +422,76 @@ function clearAccumulationMatches() {
   );
 }
 
+function isAccumulationApiUnavailableStatus(status) {
+  return status === 404 || status === 405;
+}
+
+function usesDefaultAccumulationRules(rules = state.accumulationRules) {
+  return ACCUMULATION_RULE_FIELD_DEFINITIONS.every(({ key }) => rules[key] === ACCUMULATION_DEFAULT_RULES[key]);
+}
+
+function staticAccumulationDataUrl() {
+  return new URL(`${STATIC_ACCUMULATION_DATA_PREFIX}${currentAccumulationMarket()}.json`, window.location.href).toString();
+}
+
+function applyAccumulationPayload(payload) {
+  if (payload.rules) {
+    state.accumulationRules = { ...state.accumulationRules, ...payload.rules };
+    applyAccumulationRulesToInputs(state.accumulationRules);
+  }
+
+  const resultMap = new Map((payload.results || []).map((result) => [result.symbol, result]));
+  state.rows = state.rows.map((row) => {
+    const result = resultMap.get(row.symbol);
+    if (!result) {
+      return updateRowMatchState({
+        ...row,
+        lowAccumulationLongMatch: false,
+        lowAccumulationMeta: null,
+      });
+    }
+
+    return updateRowMatchState({
+      ...row,
+      lowAccumulationLongMatch: Boolean(result.match),
+      lowAccumulationMeta: result.details || null,
+    });
+  });
+
+  state.accumulationAnalysis = {
+    status: "ready",
+    universe: state.universe,
+    candidateCount: payload.requested || payload.candidateCount || 0,
+    matchedCount: payload.matched || 0,
+    durationMs: payload.durationMs || null,
+    error: null,
+  };
+  updateSummary(state.rows);
+  applyFilters();
+}
+
+async function loadStaticAccumulationMatches(requestId) {
+  const response = await fetch(staticAccumulationDataUrl(), { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`static ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (requestId !== state.requestId) {
+    return false;
+  }
+
+  applyAccumulationPayload(payload);
+  const generatedAt = payload.generatedAt ? formatCloseDate(Date.parse(payload.generatedAt) / 1000) : null;
+  const matchedCount = state.accumulationAnalysis.matchedCount.toLocaleString("zh-TW");
+  const suffix = generatedAt ? `（資料生成：${generatedAt}）` : "";
+  setText(
+    els.statusText,
+    `快照更新完成，低檔吸籌長多改用 GitHub Pages 預先生成結果，命中 ${matchedCount} 檔${suffix}。如要即時改參數重算，請改用 \`node server.js\`。`,
+  );
+  return true;
+}
+
 function buildWidgetUrl(symbol) {
   const params = new URLSearchParams({
     frameElementId: "tv_hover_preview",
@@ -707,7 +778,7 @@ function currentAccumulationMarket() {
 }
 
 function accumulationProxyErrorMessage(status) {
-  if (status === 404 || status === 405) {
+  if (isAccumulationApiUnavailableStatus(status)) {
     return "歷史結構分析 API 不可用，請用 `node server.js` 啟動這個專案，不要使用 Live Server 或其他純靜態伺服器。";
   }
 
@@ -750,6 +821,13 @@ async function scanAccumulationLongMatches(requestId) {
     });
 
     if (!response.ok) {
+      if (isAccumulationApiUnavailableStatus(response.status) && usesDefaultAccumulationRules()) {
+        const loaded = await loadStaticAccumulationMatches(requestId);
+        if (loaded) {
+          return;
+        }
+      }
+
       throw new Error(accumulationProxyErrorMessage(response.status));
     }
 
@@ -757,36 +835,7 @@ async function scanAccumulationLongMatches(requestId) {
     if (requestId !== state.requestId) {
       return;
     }
-
-    if (payload.rules) {
-      state.accumulationRules = { ...state.accumulationRules, ...payload.rules };
-      applyAccumulationRulesToInputs(state.accumulationRules);
-    }
-
-    const resultMap = new Map((payload.results || []).map((result) => [result.symbol, result]));
-    state.rows = state.rows.map((row) => {
-      const result = resultMap.get(row.symbol);
-      if (!result) {
-        return row;
-      }
-
-      return updateRowMatchState({
-        ...row,
-        lowAccumulationLongMatch: Boolean(result.match),
-        lowAccumulationMeta: result.details || null,
-      });
-    });
-
-    state.accumulationAnalysis = {
-      status: "ready",
-      universe: state.universe,
-      candidateCount: payload.requested || candidates.length,
-      matchedCount: payload.matched || 0,
-      durationMs: payload.durationMs || null,
-      error: null,
-    };
-    updateSummary(state.rows);
-    applyFilters();
+    applyAccumulationPayload(payload);
 
     const baseCount = state.rows.length.toLocaleString("zh-TW");
     const matchedCount = state.accumulationAnalysis.matchedCount.toLocaleString("zh-TW");
@@ -822,6 +871,14 @@ function rerunAccumulationAnalysis() {
   }
 
   state.accumulationRules = readAccumulationRulesFromInputs();
+  if (!usesDefaultAccumulationRules() && window.location.hostname.endsWith("github.io")) {
+    setText(
+      els.statusText,
+      "GitHub Pages 目前只能顯示預先生成的預設參數結果；若要依自訂參數即時重算，請改用 `node server.js` 或其他可執行 Node 的部署方式。",
+    );
+    return;
+  }
+
   const requestId = state.requestId + 1;
   state.requestId = requestId;
   setText(els.statusText, "正在依照新的低檔吸籌長多參數重跑歷史結構分析...");
