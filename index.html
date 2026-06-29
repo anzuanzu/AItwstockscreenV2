@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>台股 / 美股型態條件雷達</title>
+    <meta
+      name="description"
+      content="依照 TradingView 台股與美股資料，找出符合多頭回檔、空頭反彈、杯柄/VCP、突破確認、圓弧底轉強與低檔吸籌長多條件的股票，並支援新欄位排序與篩選。"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=DM+Sans:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css?v=20260629-2" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p id="pageEyebrow" class="eyebrow">TradingView 台股掃描</p>
+          <h1 id="pageTitle">台股 / 美股型態條件雷達</h1>
+          <p class="hero-text">
+            以參考頁面的快捷條件為核心，直接掃描台股與美股最新資料，抓出
+            <strong>多頭回檔</strong>、<strong>空頭反彈</strong>、<strong>杯柄 / VCP</strong>、<strong>突破確認</strong>、<strong>圓弧底轉強</strong>與<strong>低檔吸籌長多</strong>的股票，並補上
+            TradingView 分析師評級、距 SMA20 與歷史量價結構條件。
+          </p>
+          <div class="hero-actions">
+            <button id="refreshButton" class="primary-button" type="button">更新最新數據</button>
+            <a
+              id="screenerLink"
+              class="ghost-button"
+              href="https://tw.tradingview.com/screener/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              開啟 TradingView
+            </a>
+          </div>
+          <p id="statusText" class="status-text" aria-live="polite">準備抓取最新資料...</p>
+        </div>
+        <aside class="logic-panel">
+          <h2>條件邏輯</h2>
+          <div class="logic-list">
+            <article class="logic-card logic-card-bull-week">
+              <span class="logic-pill">多頭本周大跌</span>
+              <ul>
+                <li>股票類型</li>
+                <li>收盤價 &gt; SMA200</li>
+                <li>周績效 ≤ -5%</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-bull-month">
+              <span class="logic-pill">多頭本月大跌</span>
+              <ul>
+                <li>股票類型</li>
+                <li>收盤價 &gt; SMA200</li>
+                <li>月績效 ≤ -10%</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-bear-week">
+              <span class="logic-pill">空頭本周大漲</span>
+              <ul>
+                <li>股票類型</li>
+                <li>收盤價 &lt; SMA200</li>
+                <li>周績效 ≥ 5%</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-bear-month">
+              <span class="logic-pill">空頭本月大漲</span>
+              <ul>
+                <li>股票類型</li>
+                <li>收盤價 &lt; SMA200</li>
+                <li>月績效 ≥ 10%</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-cup-handle">
+              <span class="logic-pill">杯柄型態</span>
+              <ul>
+                <li>股價 &gt; MA50、MA150、MA200</li>
+                <li>距離 52 週高點 &lt; 20%</li>
+                <li>6 個月漲幅 &gt; 0</li>
+                <li>RSI 介於 50～70</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-strong-cup-vcp">
+              <span class="logic-pill">強勢杯柄 / VCP</span>
+              <ul>
+                <li>股價 &gt; SMA50、SMA150、SMA200</li>
+                <li>SMA50 &gt; SMA150，距 52 週高點 &lt; 20%</li>
+                <li>6 個月漲幅 &gt; 10%，RSI 50～70</li>
+                <li>Relative Volume &lt; 1.2</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-breakout-confirm">
+              <span class="logic-pill">突破確認</span>
+              <ul>
+                <li>股價 &gt; SMA20、SMA50</li>
+                <li>今日漲幅 &gt; 2%，Relative Volume &gt; 1.5</li>
+                <li>RSI 60～75</li>
+                <li>距 52 週高點 &lt; 10%</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-rounding-bottom">
+              <span class="logic-pill">圓弧底 / 深杯轉強</span>
+              <ul>
+                <li>股價 &gt; SMA50</li>
+                <li>1 個月漲幅 &gt; 0，3 個月漲幅 &gt; 5%</li>
+                <li>距 52 週低點 &gt; 30%，RSI 50～70</li>
+                <li>Relative Volume &gt; 1.0，Technical Rating = Neutral 以上</li>
+              </ul>
+            </article>
+            <article class="logic-card logic-card-low-accumulation">
+              <span class="logic-pill">低檔吸籌長多</span>
+              <ul>
+                <li>現價位於 250 日區間下方 45% 內，且站上 MA60</li>
+                <li>近 120 日曾出現紅 K 大量，成交量至少為前 50 日均量 3 倍</li>
+                <li>大量後至少整理 15 根 K，現價距大量收盤拉回不超過 12%</li>
+                <li>整理期近 20 日均量 &lt; 大量日 45%，且距近 120 日高點 8% 內</li>
+              </ul>
+            </article>
+          </div>
+        </aside>
+      </header>
+
+      <main>
+        <section class="summary-grid" aria-label="統計摘要">
+          <article class="summary-card">
+            <span class="summary-label">多頭本周大跌</span>
+            <strong id="weekCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">多頭本月大跌</span>
+            <strong id="monthCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">空頭本周大漲</span>
+            <strong id="bothCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">空頭本月大漲</span>
+            <strong id="bearMonthCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">杯柄型態</span>
+            <strong id="cupHandleCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">強勢杯柄 / VCP</span>
+            <strong id="strongCupVcpCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">突破確認</span>
+            <strong id="breakoutConfirmCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">圓弧底 / 深杯轉強</span>
+            <strong id="roundingBottomCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">低檔吸籌長多</span>
+            <strong id="lowAccumulationCount" class="summary-value">-</strong>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">最新更新</span>
+            <strong id="lastUpdated" class="summary-value summary-time">尚未更新</strong>
+          </article>
+        </section>
+
+        <section class="toolbar">
+          <div class="control-group control-group-wide">
+            <label for="universeFilter">標的池</label>
+            <select id="universeFilter">
+              <option value="TAIWAN">全部台股</option>
+              <option value="US">全部美股</option>
+            </select>
+          </div>
+
+          <div class="control-group control-group-wide">
+            <label for="searchInput">搜尋股票</label>
+            <input
+              id="searchInput"
+              type="search"
+              placeholder="輸入代號、公司名稱或交易所，例如 2330 / 台積電 / AAPL / NASDAQ"
+            />
+          </div>
+
+          <div class="control-group">
+            <label for="marketFilter">交易所</label>
+            <select id="marketFilter">
+              <option value="ALL">全部交易所</option>
+              <option value="TWSE">上市 TWSE</option>
+              <option value="TPEX">上櫃 TPEX</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="matchFilter">檢視模式</label>
+            <select id="matchFilter">
+              <option value="ALL_STOCKS">全部個股</option>
+              <option value="MATCHED_ALL">全部命中</option>
+              <option value="BULL_ALL">只看多頭回檔</option>
+              <option value="BEAR_ALL">只看空頭反彈</option>
+              <option value="BULL_WEEK">只看多頭本周大跌</option>
+              <option value="BULL_MONTH">只看多頭本月大跌</option>
+              <option value="BEAR_WEEK">只看空頭本周大漲</option>
+              <option value="BEAR_MONTH">只看空頭本月大漲</option>
+              <option value="CUP_HANDLE">只看杯柄型態</option>
+              <option value="STRONG_CUP_VCP">只看強勢杯柄 / VCP</option>
+              <option value="BREAKOUT_CONFIRM">只看突破確認</option>
+              <option value="ROUNDING_BOTTOM">只看圓弧底 / 深杯轉強</option>
+              <option value="LOW_ACCUM_LONG">只看低檔吸籌長多</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="sortMode">排序方式</label>
+            <select id="sortMode">
+              <option value="AUTO">依目前模式自動排序</option>
+              <option value="BULL_WEEK">周跌幅最大優先</option>
+              <option value="BEAR_WEEK">周漲幅最大優先</option>
+              <option value="BULL_MONTH">月跌幅最大優先</option>
+              <option value="BEAR_MONTH">月漲幅最大優先</option>
+              <option value="DISTANCE_SMA200_ASC">最貼近 SMA200 優先</option>
+              <option value="DISTANCE_SMA20_ASC">最貼近 SMA20 優先</option>
+              <option value="RATING_DESC">分析師評級高優先</option>
+              <option value="RATING_ASC">分析師評級低優先</option>
+              <option value="VOL_DESC">波動率高優先</option>
+              <option value="LOW_ACCUM_LONG">低檔吸籌長多優先</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="analystFilter">TradingView 分析師評級</label>
+            <select id="analystFilter">
+              <option value="ALL">全部</option>
+              <option value="STRONG_BUY">強力買入</option>
+              <option value="BUY">買入</option>
+              <option value="NEUTRAL">中立</option>
+              <option value="SELL">賣出</option>
+              <option value="STRONG_SELL">強力賣出</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="distance20Min">距 SMA20</label>
+            <div class="range-fields">
+              <input id="distance20Min" type="number" step="0.1" placeholder="最小 %" />
+              <input id="distance20Max" type="number" step="0.1" placeholder="最大 %" />
+            </div>
+          </div>
+        </section>
+
+        <section class="parameter-panel" aria-label="低檔吸籌長多參數">
+          <div class="table-header">
+            <div>
+              <h2>低檔吸籌長多參數</h2>
+              <p class="panel-note">
+                百分比欄位直接輸入數字即可，例如 <code>45</code> 代表 45%。調整後可按「只重跑低檔條件」快速重算，不必重抓整份快照。
+              </p>
+            </div>
+            <div class="parameter-actions">
+              <button id="accumulationRerunButton" class="primary-button" type="button">只重跑低檔條件</button>
+              <button id="accumulationResetButton" class="ghost-button" type="button">恢復預設</button>
+            </div>
+          </div>
+
+          <div class="parameter-grid">
+            <div class="control-group">
+              <label for="ruleRangeLookback">250 日區間回看</label>
+              <input id="ruleRangeLookback" data-accumulation-rule="rangeLookback" type="number" min="30" max="600" step="1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleSpikeLookback">大量搜尋區間</label>
+              <input id="ruleSpikeLookback" data-accumulation-rule="spikeLookback" type="number" min="20" max="300" step="1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleHighLookback">前高回看區間</label>
+              <input id="ruleHighLookback" data-accumulation-rule="highLookback" type="number" min="20" max="300" step="1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleMovingAveragePeriod">站上均線期數</label>
+              <input id="ruleMovingAveragePeriod" data-accumulation-rule="movingAveragePeriod" type="number" min="5" max="250" step="1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleVolumeAveragePeriod">量能均線期數</label>
+              <input id="ruleVolumeAveragePeriod" data-accumulation-rule="volumeAveragePeriod" type="number" min="5" max="120" step="1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleConsolidationLookback">整理期回看</label>
+              <input id="ruleConsolidationLookback" data-accumulation-rule="consolidationLookback" type="number" min="5" max="120" step="1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleMinDaysSinceSpike">大量後至少 K 數</label>
+              <input id="ruleMinDaysSinceSpike" data-accumulation-rule="minDaysSinceSpike" type="number" min="1" max="120" step="1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleMinSpikeVolumeMultiple">大量倍數門檻</label>
+              <input id="ruleMinSpikeVolumeMultiple" data-accumulation-rule="minSpikeVolumeMultiple" type="number" min="1" max="20" step="0.1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleMaxPricePosition">區間位置上限 %</label>
+              <input id="ruleMaxPricePosition" data-accumulation-rule="maxPricePosition" type="number" min="5" max="100" step="0.1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleMaxPullbackPct">距大量收盤回檔上限 %</label>
+              <input id="ruleMaxPullbackPct" data-accumulation-rule="maxPullbackPct" type="number" min="0.5" max="50" step="0.1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleLowBreakTolerancePct">跌破大量低點容忍 %</label>
+              <input id="ruleLowBreakTolerancePct" data-accumulation-rule="lowBreakTolerancePct" type="number" min="0" max="20" step="0.1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleMaxConsolidationVolumeRatio">整理均量上限 %</label>
+              <input id="ruleMaxConsolidationVolumeRatio" data-accumulation-rule="maxConsolidationVolumeRatio" type="number" min="5" max="200" step="0.1" />
+            </div>
+            <div class="control-group">
+              <label for="ruleMaxDistanceToHighPct">距近端高點上限 %</label>
+              <input id="ruleMaxDistanceToHighPct" data-accumulation-rule="maxDistanceToHighPct" type="number" min="0.5" max="50" step="0.1" />
+            </div>
+          </div>
+        </section>
+
+        <section class="table-panel">
+          <div class="table-header">
+            <div>
+              <h2>個股清單</h2>
+              <p class="panel-note">
+                滑鼠移到股票名稱或代號，可快顯 TradingView K 線圖。
+              </p>
+            </div>
+            <p id="resultMeta" class="result-meta">尚未載入資料</p>
+          </div>
+
+          <div id="protocolWarning" class="protocol-warning hidden">
+            目前若直接以 <code>file://</code> 開啟，資料不會完整載入。請用本地 HTTP
+            伺服器開啟這個資料夾，建議使用 <code>node server.js</code>。
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>命中</th>
+                  <th>股票</th>
+                  <th>市價</th>
+                  <th>收盤日期</th>
+                  <th>周績效</th>
+                  <th>月績效</th>
+                  <th>周波動率</th>
+                  <th>TradingView 分析師評級</th>
+                  <th>SMA200</th>
+                  <th>距 SMA200</th>
+                  <th>SMA20</th>
+                  <th>距 SMA20</th>
+                  <th>市場</th>
+                </tr>
+              </thead>
+              <tbody id="stockTableBody">
+                <tr>
+                  <td colspan="13" class="empty-state">載入中...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="chartPreview" class="chart-preview hidden" role="dialog" aria-label="K 線圖快顯">
+      <div class="chart-preview-head">
+        <div>
+          <p id="previewSymbol" class="preview-symbol">TWSE:2330</p>
+          <p id="previewName" class="preview-name">股票 K 線快顯</p>
+        </div>
+        <a id="previewLink" href="#" target="_blank" rel="noreferrer">開啟完整圖表</a>
+      </div>
+      <iframe
+        id="previewFrame"
+        title="TradingView K 線圖快顯"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+      ></iframe>
+    </div>
+
+    <template id="rowTemplate">
+      <tr>
+        <td class="match-cell"></td>
+        <td class="symbol-cell"></td>
+        <td class="number-cell close-cell"></td>
+        <td class="close-date-cell"></td>
+        <td class="number-cell week-cell"></td>
+        <td class="number-cell month-cell"></td>
+        <td class="number-cell vol-cell"></td>
+        <td class="rating-cell"></td>
+        <td class="number-cell sma-cell"></td>
+        <td class="number-cell distance200-cell distance-cell"></td>
+        <td class="number-cell sma20-cell"></td>
+        <td class="number-cell distance20-cell"></td>
+        <td class="market-cell"></td>
+      </tr>
+    </template>
+
+    <script defer src="./app.js?v=20260629-2"></script>
+  </body>
+</html>
